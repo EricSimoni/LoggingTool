@@ -1,0 +1,14 @@
+database:
+  host: "127.0.0.1"
+  port: 5432
+  name: "intrusion"
+  user: "intrusion_logger"
+  password: "CHANGE_ME"
+
+geoip:
+  database_path: "/usr/share/GeoIP/GeoLite2-City.mmdb"
+
+collector:
+  schema: "eng_ops"
+  table: "firewall_logs"
+  batch_size: 500

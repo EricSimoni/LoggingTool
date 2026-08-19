@@ -1,0 +1,5 @@
+psycopg
+geoip2
+PyYAML
+python-dotenv
+pytest
