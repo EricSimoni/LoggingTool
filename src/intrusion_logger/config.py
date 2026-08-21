@@ -57,6 +57,9 @@ class CollectorConfig:
 
     source: str = ""
     poll_interval: int = 5
+    schema: str = "eng_ops"
+    table: str = "firewall_logs"
+    batch_size: int = 100
 
 
 @dataclass(frozen=True)
@@ -226,6 +229,15 @@ def load_config(path: str | Path = "config/config.yaml") -> AppConfig:
         ),
         poll_interval=int(
             collector_data.get("poll_interval", 5)
+        ),
+        schema=str(
+            collector_data.get("schema", "eng_ops")
+        ),
+        table=str(
+            collector_data.get("table", "firewall_logs")
+        ),
+        batch_size=int(
+            collector_data.get("batch_size", 100)
         ),
     )
 
