@@ -112,7 +112,7 @@ def _require_mapping(
     return value
 
 
-def load_config(path: str | Path) -> AppConfig:
+def load_config(path: str | Path = "config/config.yaml") -> AppConfig:
     """
     Load application configuration from a YAML file.
 

@@ -12,3 +12,5 @@ collector:
   schema: "eng_ops"
   table: "firewall_logs"
   batch_size: 500
+
+  eric@mage:~/eric/geoLogging/GeoLite2-City_20260818

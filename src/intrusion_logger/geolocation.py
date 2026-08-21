@@ -25,6 +25,7 @@ class GeoLocator:
     def __init__(self, database_path: str | Path) -> None:
         self.database_path = Path(database_path)
         self._reader: geoip2.database.Reader | None = None
+        self.open()
 
     def open(self) -> None:
         """Open the GeoIP database."""

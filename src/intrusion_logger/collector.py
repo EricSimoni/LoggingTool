@@ -35,6 +35,16 @@ class FirewallLogCollector:
     ) -> None:
         self.database = database
         self.config = config
+        self._ensure_connected()
+
+    def _ensure_connected(self) -> None:
+        """Ensure database connection is established."""
+        if self.database._connection is None:
+            self.database.connect()
+
+    def close(self) -> None:
+        """Close the database connection."""
+        self.database.close()
 
     def fetch_unprocessed(self) -> list[FirewallEvent]:
         """Fetch a batch of firewall events.
@@ -111,3 +121,45 @@ class FirewallLogCollector:
             raise CollectorError(
                 "Invalid firewall log database row."
             ) from exc
+
+    def dump_all_logs(self) -> dict[int, dict[str, Any]]:
+        """Dump all firewall logs to a dictionary.
+
+        Returns
+        -------
+        dict[int, dict[str, Any]]
+            Dictionary mapping log IDs to log data.
+        """
+        sql = f"SELECT * FROM {self.config.schema}.{self.config.table}"
+        rows = self.database.fetch_all(sql)
+        
+        firewall_log_dict = {}
+        for row in rows:
+            firewall_log_dict[row["id"]] = {
+                "log_time": row["log_time"],
+                "src_ip": row["src_ip"],
+                "dst_ip": row["dst_ip"],
+                "spt": row["spt"],
+                "dport": row["dport"],
+                "protocol": row["protocol"],
+                "action": row["action"],
+            }
+        
+        return firewall_log_dict
+
+    def count_table_rows(self, table_name: str) -> int:
+        """Count rows in a specified table.
+
+        Parameters
+        ----------
+        table_name: str
+            Name of the table to count rows in.
+
+        Returns
+        -------
+        int
+            Number of rows in the table.
+        """
+        sql = f"SELECT count(*) as row_count FROM {table_name}"
+        result = self.database.fetch_one(sql)
+        return result["row_count"]
