@@ -135,6 +135,19 @@ def load_config(path: str | Path = "config/config.yaml") -> AppConfig:
     """
 
     config_path = Path(path)
+    
+    # If path is relative, try to resolve it from current working directory first
+    if not config_path.is_absolute():
+        # Try current working directory
+        cwd_path = Path.cwd() / config_path
+        if cwd_path.is_file():
+            config_path = cwd_path
+        else:
+            # Try relative to this module's directory
+            module_dir = Path(__file__).parent.parent.parent
+            module_path = module_dir / config_path
+            if module_path.is_file():
+                config_path = module_path
 
     if not config_path.is_file():
         raise FileNotFoundError(

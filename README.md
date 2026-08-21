@@ -45,6 +45,9 @@ source .venv/bin/activate
 # Install dependencies
 pip install -r requirements.txt
 
+# Install package in editable mode (required for proper module resolution)
+pip install -e .
+
 # Copy and configure
 cp config/config.example.yaml config/config.yaml
 # Edit config/config.yaml with your database credentials
@@ -52,19 +55,21 @@ cp config/config.example.yaml config/config.yaml
 
 ## Database Setup
 
-1. **Create the database and schema** (see `prototype/database_setup_log.txt` for Fedora-specific instructions)
+For complete Fedora-specific setup instructions including PostgreSQL, pgAdmin, and rsyslog configuration, see [docs/FEDORA_SETUP.md](docs/FEDORA_SETUP.md).
 
-2. **Apply the base table schema**:
+**Quick setup steps:**
+
+1. **Apply the base table schema**:
 ```bash
 psql -U postgres -d intrusion -f sql/000_base_table.sql
 ```
 
-3. **Apply the enrichment table schema**:
+2. **Apply the enrichment table schema**:
 ```bash
 psql -U postgres -d intrusion -f sql/001_enrichment_table.sql
 ```
 
-4. **Configure rsyslog** to log firewalld events to PostgreSQL (see `prototype/database_setup_log.txt` for the complete rsyslog configuration)
+3. **Configure rsyslog** to log firewalld events to PostgreSQL (see [docs/FEDORA_SETUP.md](docs/FEDORA_SETUP.md) for complete rsyslog configuration)
 
 ## Configuration
 
@@ -95,13 +100,13 @@ processor:
 
 ```bash
 # Show help
-python -m src.intrusion_logger --help
+python -m intrusion_logger --help
 
 # Process one batch of unprocessed events
-python -m src.intrusion_logger --once
+python -m intrusion_logger --once
 
 # Continuous mode (not yet implemented)
-python -m src.intrusion_logger
+python -m intrusion_logger
 ```
 
 ## Architecture
