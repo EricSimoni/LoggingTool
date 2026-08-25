@@ -2,11 +2,27 @@ import argparse
 import logging
 import pprint
 import sys
+from pathlib import Path
 
 from .config import load_config
 from .database import Database
 from .collector import FirewallLogCollector
 from .geolocation import GeoLocator
+from .graphing import (
+    aggregate_activity_data,
+    aggregate_country_data,
+    aggregate_port_data,
+    aggregate_protocol_data,
+    aggregate_action_data,
+    plot_activity_graph,
+    plot_country_graph,
+    plot_port_graph,
+    plot_protocol_graph,
+    plot_action_graph,
+    export_data_csv,
+    export_data_json,
+    parse_time_range,
+)
 
 
 def build_parser():
@@ -59,6 +75,51 @@ def build_parser():
         "--version", "-V", 
         action="version", 
         version="%(prog)s 0.1.0"
+    )
+    parser.add_argument(
+        "--graph-activity",
+        action="store_true",
+        help="Generate time series graph of firewall activity"
+    )
+    parser.add_argument(
+        "--graph-countries",
+        action="store_true",
+        help="Generate bar chart of top source countries"
+    )
+    parser.add_argument(
+        "--graph-ports",
+        action="store_true",
+        help="Generate chart of most targeted ports"
+    )
+    parser.add_argument(
+        "--graph-protocols",
+        action="store_true",
+        help="Generate protocol distribution pie chart"
+    )
+    parser.add_argument(
+        "--graph-actions",
+        action="store_true",
+        help="Generate REJECT/ALLOW/DENY distribution"
+    )
+    parser.add_argument(
+        "--export-graph-data",
+        action="store_true",
+        help="Export graph data to CSV/JSON for external visualization"
+    )
+    parser.add_argument(
+        "--time-range",
+        help="Specify time range for graphs (e.g., '7d', '2024-01-01:2024-01-31')"
+    )
+    parser.add_argument(
+        "--top-n",
+        type=int,
+        default=10,
+        help="Limit results to top N items (default: 10)"
+    )
+    parser.add_argument(
+        "--output-dir",
+        default="graphs",
+        help="Directory to save graph files (default: graphs)"
     )
     return parser
 
@@ -130,6 +191,109 @@ def main():
         except FileNotFoundError:
             print(f"Error: File not found: {args.filename}")
             sys.exit(1)
+        collector.close()
+        sys.exit(0)
+
+    # Graphing options
+    if any([args.graph_activity, args.graph_countries, args.graph_ports, 
+            args.graph_protocols, args.graph_actions, args.export_graph_data]):
+        # Create output directory
+        output_dir = Path(args.output_dir)
+        output_dir.mkdir(parents=True, exist_ok=True)
+        
+        # Fetch logs
+        logs_list = []
+        firewall_log_dict = collector.dump_all_logs()
+        for log_id, log_data in firewall_log_dict.items():
+            log_entry = {
+                'log_time': log_data.get('log_time'),
+                'src_ip': log_data.get('src_ip'),
+                'dst_ip': log_data.get('dst_ip'),
+                'spt': log_data.get('spt'),
+                'dport': log_data.get('dport'),
+                'protocol': log_data.get('protocol'),
+                'action': log_data.get('action'),
+            }
+            
+            # Add geolocation data if available
+            src_ip = log_data.get('src_ip')
+            if src_ip:
+                geolocation = geolocator.lookup(src_ip)
+                if geolocation:
+                    log_entry['country'] = geolocation.country
+                    log_entry['region'] = geolocation.region
+                else:
+                    log_entry['country'] = 'Unknown'
+                    log_entry['region'] = 'Unknown'
+            
+            logs_list.append(log_entry)
+        
+        # Apply time range filter if specified
+        if args.time_range:
+            start_time, end_time = parse_time_range(args.time_range)
+            logs_list = [
+                log for log in logs_list 
+                if start_time <= log['log_time'] <= end_time
+            ]
+        
+        # Generate requested graphs
+        if args.graph_activity:
+            activity_data = aggregate_activity_data(logs_list)
+            plot_activity_graph(activity_data, output_dir / 'activity.png')
+            print(f"Activity graph saved to {output_dir / 'activity.png'}")
+        
+        if args.graph_countries:
+            country_data = aggregate_country_data(logs_list, args.top_n)
+            plot_country_graph(country_data, output_dir / 'countries.png')
+            print(f"Country graph saved to {output_dir / 'countries.png'}")
+        
+        if args.graph_ports:
+            port_data = aggregate_port_data(logs_list, args.top_n)
+            plot_port_graph(port_data, output_dir / 'ports.png')
+            print(f"Port graph saved to {output_dir / 'ports.png'}")
+        
+        if args.graph_protocols:
+            protocol_data = aggregate_protocol_data(logs_list)
+            plot_protocol_graph(protocol_data, output_dir / 'protocols.png')
+            print(f"Protocol graph saved to {output_dir / 'protocols.png'}")
+        
+        if args.graph_actions:
+            action_data = aggregate_action_data(logs_list)
+            plot_action_graph(action_data, output_dir / 'actions.png')
+            print(f"Action graph saved to {output_dir / 'actions.png'}")
+        
+        # Export data if requested
+        if args.export_graph_data:
+            if args.graph_activity:
+                activity_data = aggregate_activity_data(logs_list)
+                export_data_csv(activity_data, output_dir / 'activity_data.csv')
+                export_data_json(activity_data, output_dir / 'activity_data.json')
+                print(f"Activity data exported to {output_dir / 'activity_data.csv'} and {output_dir / 'activity_data.json'}")
+            
+            if args.graph_countries:
+                country_data = aggregate_country_data(logs_list, args.top_n)
+                export_data_csv(country_data, output_dir / 'countries_data.csv')
+                export_data_json(country_data, output_dir / 'countries_data.json')
+                print(f"Country data exported to {output_dir / 'countries_data.csv'} and {output_dir / 'countries_data.json'}")
+            
+            if args.graph_ports:
+                port_data = aggregate_port_data(logs_list, args.top_n)
+                export_data_csv(port_data, output_dir / 'ports_data.csv')
+                export_data_json(port_data, output_dir / 'ports_data.json')
+                print(f"Port data exported to {output_dir / 'ports_data.csv'} and {output_dir / 'ports_data.json'}")
+            
+            if args.graph_protocols:
+                protocol_data = aggregate_protocol_data(logs_list)
+                export_data_csv(protocol_data, output_dir / 'protocols_data.csv')
+                export_data_json(protocol_data, output_dir / 'protocols_data.json')
+                print(f"Protocol data exported to {output_dir / 'protocols_data.csv'} and {output_dir / 'protocols_data.json'}")
+            
+            if args.graph_actions:
+                action_data = aggregate_action_data(logs_list)
+                export_data_csv(action_data, output_dir / 'actions_data.csv')
+                export_data_json(action_data, output_dir / 'actions_data.json')
+                print(f"Action data exported to {output_dir / 'actions_data.csv'} and {output_dir / 'actions_data.json'}")
+        
         collector.close()
         sys.exit(0)
 
