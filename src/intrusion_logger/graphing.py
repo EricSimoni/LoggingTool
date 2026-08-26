@@ -8,6 +8,7 @@ from typing import Any
 
 import matplotlib.pyplot as plt
 import pandas as pd
+import yaml
 
 
 def parse_time_range(time_range: str) -> tuple[datetime, datetime]:
@@ -286,3 +287,17 @@ def export_data_json(data: pd.DataFrame, output_path: Path) -> None:
         Path to save the JSON file
     """
     data.to_json(output_path, orient='records', indent=2)
+
+
+def export_data_yaml(data: pd.DataFrame, output_path: Path) -> None:
+    """Export data to YAML file.
+    
+    Parameters
+    ----------
+    data: pd.DataFrame
+        DataFrame to export
+    output_path: Path
+        Path to save the YAML file
+    """
+    with open(output_path, 'w') as f:
+        yaml.dump(data.to_dict(orient='records'), f, default_flow_style=False, sort_keys=False)

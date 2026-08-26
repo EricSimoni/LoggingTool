@@ -23,6 +23,7 @@ from .graphing import (
     plot_action_graph,
     export_data_csv,
     export_data_json,
+    export_data_yaml,
     parse_time_range,
 )
 
@@ -298,31 +299,36 @@ def main():
                 activity_data = aggregate_activity_data(logs_list)
                 export_data_csv(activity_data, output_dir / 'activity_data.csv')
                 export_data_json(activity_data, output_dir / 'activity_data.json')
-                print(f"Activity data exported to {output_dir / 'activity_data.csv'} and {output_dir / 'activity_data.json'}")
+                export_data_yaml(activity_data, output_dir / 'activity_data.yaml')
+                print(f"Activity data exported to {output_dir / 'activity_data.csv'}, {output_dir / 'activity_data.json'}, and {output_dir / 'activity_data.yaml'}")
             
             if args.graph_countries:
                 country_data = aggregate_country_data(logs_list, args.top_n)
                 export_data_csv(country_data, output_dir / 'countries_data.csv')
                 export_data_json(country_data, output_dir / 'countries_data.json')
-                print(f"Country data exported to {output_dir / 'countries_data.csv'} and {output_dir / 'countries_data.json'}")
+                export_data_yaml(country_data, output_dir / 'countries_data.yaml')
+                print(f"Country data exported to {output_dir / 'countries_data.csv'}, {output_dir / 'countries_data.json'}, and {output_dir / 'countries_data.yaml'}")
             
             if args.graph_ports:
                 port_data = aggregate_port_data(logs_list, args.top_n)
                 export_data_csv(port_data, output_dir / 'ports_data.csv')
                 export_data_json(port_data, output_dir / 'ports_data.json')
-                print(f"Port data exported to {output_dir / 'ports_data.csv'} and {output_dir / 'ports_data.json'}")
+                export_data_yaml(port_data, output_dir / 'ports_data.yaml')
+                print(f"Port data exported to {output_dir / 'ports_data.csv'}, {output_dir / 'ports_data.json'}, and {output_dir / 'ports_data.yaml'}")
             
             if args.graph_protocols:
                 protocol_data = aggregate_protocol_data(logs_list)
                 export_data_csv(protocol_data, output_dir / 'protocols_data.csv')
                 export_data_json(protocol_data, output_dir / 'protocols_data.json')
-                print(f"Protocol data exported to {output_dir / 'protocols_data.csv'} and {output_dir / 'protocols_data.json'}")
+                export_data_yaml(protocol_data, output_dir / 'protocols_data.yaml')
+                print(f"Protocol data exported to {output_dir / 'protocols_data.csv'}, {output_dir / 'protocols_data.json'}, and {output_dir / 'protocols_data.yaml'}")
             
             if args.graph_actions:
                 action_data = aggregate_action_data(logs_list)
                 export_data_csv(action_data, output_dir / 'actions_data.csv')
                 export_data_json(action_data, output_dir / 'actions_data.json')
-                print(f"Action data exported to {output_dir / 'actions_data.csv'} and {output_dir / 'actions_data.json'}")
+                export_data_yaml(action_data, output_dir / 'actions_data.yaml')
+                print(f"Action data exported to {output_dir / 'actions_data.csv'}, {output_dir / 'actions_data.json'}, and {output_dir / 'actions_data.yaml'}")
         
         collector.close()
         sys.exit(0)
