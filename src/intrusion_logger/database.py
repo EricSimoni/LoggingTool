@@ -11,6 +11,7 @@ Application-specific logic belongs in the modules above this layer:
 
 from __future__ import annotations
 
+import logging
 from collections.abc import Mapping, Sequence
 from typing import Any
 
@@ -19,6 +20,8 @@ from psycopg import Connection
 from psycopg.rows import dict_row
 
 from intrusion_logger.config import DatabaseConfig
+
+logger = logging.getLogger(__name__)
 
 
 class DatabaseError(RuntimeError):
@@ -47,8 +50,10 @@ class Database:
         """
 
         if self._connection is not None:
+            logger.debug("Database connection already established")
             return
 
+        logger.info(f"Connecting to PostgreSQL at {self.config.host}:{self.config.port}/{self.config.database}")
         try:
             self._connection = psycopg.connect(
                 host=self.config.host,
@@ -58,7 +63,9 @@ class Database:
                 password=self.config.password,
                 row_factory=dict_row,
             )
+            logger.info("Successfully connected to PostgreSQL")
         except psycopg.Error as exc:
+            logger.error(f"Failed to connect to PostgreSQL: {exc}")
             raise DatabaseError(
                 "Unable to connect to PostgreSQL."
             ) from exc
@@ -67,8 +74,10 @@ class Database:
         """Close the current database connection."""
 
         if self._connection is not None:
+            logger.info("Closing database connection")
             self._connection.close()
             self._connection = None
+            logger.debug("Database connection closed")
 
     @property
     def connection(self) -> Connection:
@@ -109,12 +118,16 @@ class Database:
             Query results as dictionaries.
         """
 
+        logger.debug(f"Executing fetch_all query: {query[:100]}...")
         try:
             with self.connection.cursor() as cursor:
                 cursor.execute(query, params)
-                return list(cursor.fetchall())
+                results = list(cursor.fetchall())
+                logger.debug(f"fetch_all returned {len(results)} rows")
+                return results
 
         except psycopg.Error as exc:
+            logger.error(f"fetch_all query failed: {exc}")
             raise DatabaseError(
                 "Database query failed."
             ) from exc
@@ -126,12 +139,16 @@ class Database:
     ) -> dict[str, Any] | None:
         """Execute a SELECT query and return one row."""
 
+        logger.debug(f"Executing fetch_one query: {query[:100]}...")
         try:
             with self.connection.cursor() as cursor:
                 cursor.execute(query, params)
-                return cursor.fetchone()
+                result = cursor.fetchone()
+                logger.debug(f"fetch_one returned {result is not None}")
+                return result
 
         except psycopg.Error as exc:
+            logger.error(f"fetch_one query failed: {exc}")
             raise DatabaseError(
                 "Database query failed."
             ) from exc
@@ -151,17 +168,20 @@ class Database:
             Number of affected rows when PostgreSQL provides it.
         """
 
+        logger.debug(f"Executing execute statement: {query[:100]}...")
         try:
             with self.connection.cursor() as cursor:
                 cursor.execute(query, params)
                 affected_rows = cursor.rowcount
 
             self.connection.commit()
+            logger.info(f"Execute statement affected {affected_rows} rows")
 
             return affected_rows
 
         except psycopg.Error as exc:
             self.connection.rollback()
+            logger.error(f"Execute statement failed, transaction rolled back: {exc}")
 
             raise DatabaseError(
                 "Database statement failed."

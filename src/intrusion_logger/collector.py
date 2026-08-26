@@ -2,11 +2,14 @@
 
 from __future__ import annotations
 
+import logging
 from ipaddress import ip_address
 from typing import Any
 
 from .database import Database
 from .models import FirewallEvent
+
+logger = logging.getLogger(__name__)
 
 
 class CollectorError(RuntimeError):
@@ -35,15 +38,18 @@ class FirewallLogCollector:
     ) -> None:
         self.database = database
         self.config = config
+        logger.info(f"Initializing FirewallLogCollector for {self.config.schema}.{self.config.table}")
         self._ensure_connected()
 
     def _ensure_connected(self) -> None:
         """Ensure database connection is established."""
         if self.database._connection is None:
+            logger.debug("Database connection not established, connecting now")
             self.database.connect()
 
     def close(self) -> None:
         """Close the database connection."""
+        logger.info("Closing FirewallLogCollector")
         self.database.close()
 
     def fetch_unprocessed(self) -> list[FirewallEvent]:
@@ -62,6 +68,7 @@ class FirewallLogCollector:
             Raw firewall events converted into application models.
         """
 
+        logger.info(f"Fetching up to {self.config.batch_size} unprocessed events")
         sql = f"""
             SELECT
                 id,
@@ -83,7 +90,9 @@ class FirewallLogCollector:
                 sql,
                 (self.config.batch_size,),
             )
+            logger.info(f"Successfully fetched {len(rows)} events")
         except Exception as exc:
+            logger.error(f"Failed to fetch firewall events: {exc}")
             raise CollectorError(
                 "Unable to collect firewall events."
             ) from exc
@@ -130,6 +139,7 @@ class FirewallLogCollector:
         dict[int, dict[str, Any]]
             Dictionary mapping log IDs to log data.
         """
+        logger.info(f"Dumping all logs from {self.config.schema}.{self.config.table}")
         sql = f"SELECT * FROM {self.config.schema}.{self.config.table}"
         rows = self.database.fetch_all(sql)
         
@@ -145,6 +155,7 @@ class FirewallLogCollector:
                 "action": row["action"],
             }
         
+        logger.info(f"Dumped {len(firewall_log_dict)} log entries")
         return firewall_log_dict
 
     def count_table_rows(self, table_name: str) -> int:
@@ -160,6 +171,9 @@ class FirewallLogCollector:
         int
             Number of rows in the table.
         """
+        logger.debug(f"Counting rows in table: {table_name}")
         sql = f"SELECT count(*) as row_count FROM {table_name}"
         result = self.database.fetch_one(sql)
-        return result["row_count"]
+        row_count = result["row_count"]
+        logger.info(f"Table {table_name} has {row_count} rows")
+        return row_count

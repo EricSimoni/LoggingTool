@@ -15,8 +15,13 @@ config/config.yaml
 *.mmdb
 
 prototype/
+logs/
+graphs/
 
 .vscode/
 .idea/
 .DS_Store
 Thumbs.db
+
+
+intrusion_logger.egg-info/

@@ -1,9 +1,11 @@
 import argparse
 import logging
+import logging.handlers
 import pprint
 import sys
 from pathlib import Path
 
+from . import __version__
 from .config import load_config
 from .database import Database
 from .collector import FirewallLogCollector
@@ -133,18 +135,46 @@ def main():
     
     config = load_config(args.config)
     
-    # Setup logging
-    log_level = getattr(logging, args.loglevel.upper(), logging.INFO)
+    # Set up logging
     if args.debug:
         log_level = logging.DEBUG
-    logging.basicConfig(
-        level=log_level,
-        format=config.logging.format
+    else:
+        log_level = logging.INFO
+    
+    # Create logs directory
+    log_dir = Path("logs")
+    log_dir.mkdir(parents=True, exist_ok=True)
+    
+    # Configure root logger
+    root_logger = logging.getLogger()
+    root_logger.setLevel(log_level)
+    
+    # Console handler
+    console_handler = logging.StreamHandler(sys.stdout)
+    console_handler.setLevel(log_level)
+    console_formatter = logging.Formatter(config.logging.format)
+    console_handler.setFormatter(console_formatter)
+    root_logger.addHandler(console_handler)
+    
+    # File handler with rotation
+    file_handler = logging.handlers.RotatingFileHandler(
+        log_dir / "intrusion_logger.log",
+        maxBytes=10 * 1024 * 1024,  # 10 MB
+        backupCount=5
     )
+    file_handler.setLevel(log_level)
+    file_formatter = logging.Formatter(config.logging.format)
+    file_handler.setFormatter(file_formatter)
+    root_logger.addHandler(file_handler)
+    
     logger = logging.getLogger(__name__)
     
     if args.verbose:
         logger.setLevel(logging.DEBUG)
+    
+    logger.info(f"Intrusion Logger version {__version__} starting")
+    logger.debug(f"Configuration loaded from: {args.config}")
+    logger.debug(f"Log level set to: {logging.getLevelName(log_level)}")
 
     # Initialize components - they handle their own connections
     db = Database(config.database)
