@@ -1,5 +1,13 @@
 __pycache__/
 *.py[cod]
+*.pyo
+*.pyd
+.Python
+*.so
+*.egg
+*.egg-info/
+dist/
+build/
 .venv/
 venv/
 .pytest_cache/
@@ -7,6 +15,15 @@ venv/
 .ruff_cache/
 .coverage
 htmlcov/
+*.log
+*.db
+*.sqlite
+*.sqlite3
+*.tmp
+*.bak
+*.swp
+*.swo
+*~
 
 config/config.yaml
 .access.yml
@@ -14,7 +31,6 @@ config/config.yaml
 .env.*
 *.mmdb
 
-prototype/
 logs/
 graphs/
 
@@ -22,6 +38,3 @@ graphs/
 .idea/
 .DS_Store
 Thumbs.db
-
-
-intrusion_logger.egg-info/
