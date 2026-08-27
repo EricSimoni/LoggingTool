@@ -1,5 +1,6 @@
 import argparse
 import logging
+import logging.config
 import logging.handlers
 import pprint
 import sys
@@ -56,8 +57,13 @@ def build_parser():
     )
     parser.add_argument(
         "--config", "-c",
-        default="config/config.yaml",
-        help="Path to configuration file (default: config/config.yaml)"
+        help="Path to configuration file",
+        default="config/config.yaml"
+    )
+    parser.add_argument(
+        "--logging-config",
+        help="Path to logging configuration file",
+        default="config/logging_config.ini"
     )
     parser.add_argument(
         "--loglevel", "-l", 
@@ -136,37 +142,35 @@ def main():
     
     config = load_config(args.config)
     
-    # Set up logging
-    if args.debug:
-        log_level = logging.DEBUG
-    else:
-        log_level = logging.INFO
-    
-    # Create logs directory
+    # Set up logging from config file
+    # Create logs directory first
     log_dir = Path("logs")
     log_dir.mkdir(parents=True, exist_ok=True)
     
-    # Configure root logger
-    root_logger = logging.getLogger()
-    root_logger.setLevel(log_level)
+    # Load logging configuration from INI file
+    logging_config_path = Path(args.logging_config)
+    if logging_config_path.exists():
+        logging.config.fileConfig(logging_config_path, disable_existing_loggers=False)
+    else:
+        # Fallback to basic config if file doesn't exist
+        logging.basicConfig(
+            level=logging.INFO,
+            format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+            handlers=[
+                logging.StreamHandler(sys.stdout),
+                logging.handlers.RotatingFileHandler(
+                    log_dir / "intrusion_logger.log",
+                    maxBytes=10 * 1024 * 1024,
+                    backupCount=5
+                )
+            ]
+        )
     
-    # Console handler
-    console_handler = logging.StreamHandler(sys.stdout)
-    console_handler.setLevel(log_level)
-    console_formatter = logging.Formatter(config.logging.format)
-    console_handler.setFormatter(console_formatter)
-    root_logger.addHandler(console_handler)
-    
-    # File handler with rotation
-    file_handler = logging.handlers.RotatingFileHandler(
-        log_dir / "intrusion_logger.log",
-        maxBytes=10 * 1024 * 1024,  # 10 MB
-        backupCount=5
-    )
-    file_handler.setLevel(log_level)
-    file_formatter = logging.Formatter(config.logging.format)
-    file_handler.setFormatter(file_formatter)
-    root_logger.addHandler(file_handler)
+    # Override log level if debug flag is set
+    if args.debug:
+        logging.getLogger().setLevel(logging.DEBUG)
+        for handler in logging.getLogger().handlers:
+            handler.setLevel(logging.DEBUG)
     
     logger = logging.getLogger(__name__)
     
@@ -175,7 +179,7 @@ def main():
     
     logger.info(f"Intrusion Logger version {__version__} starting")
     logger.debug(f"Configuration loaded from: {args.config}")
-    logger.debug(f"Log level set to: {logging.getLevelName(log_level)}")
+    logger.debug(f"Logging configuration loaded from: {args.logging_config}")
 
     # Initialize components - they handle their own connections
     db = Database(config.database)

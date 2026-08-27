@@ -26,6 +26,7 @@ htmlcov/
 *~
 
 config/config.yaml
+config/logging_config.ini
 .access.yml
 .env
 .env.*
