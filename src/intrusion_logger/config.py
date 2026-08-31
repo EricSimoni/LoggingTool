@@ -71,6 +71,14 @@ class ProcessorConfig:
 
 
 @dataclass(frozen=True)
+class RetentionConfig:
+    """Configuration for data retention policies."""
+
+    enabled: bool = True
+    max_days: int = 180
+
+
+@dataclass(frozen=True)
 class AppConfig:
     """Top-level application configuration."""
 
@@ -94,6 +102,10 @@ class AppConfig:
 
     processor: ProcessorConfig = field(
         default_factory=ProcessorConfig
+    )
+
+    retention: RetentionConfig = field(
+        default_factory=RetentionConfig
     )
 
 
@@ -190,6 +202,11 @@ def load_config(path: str | Path = "config/config.yaml") -> AppConfig:
         "processor",
     )
 
+    retention_data = _require_mapping(
+        raw_config.get("retention"),
+        "retention",
+    )
+
     database = DatabaseConfig(
         host=str(database_data.get("host", "localhost")),
         port=int(database_data.get("port", 5432)),
@@ -250,6 +267,15 @@ def load_config(path: str | Path = "config/config.yaml") -> AppConfig:
         ),
     )
 
+    retention = RetentionConfig(
+        enabled=bool(
+            retention_data.get("enabled", True)
+        ),
+        max_days=int(
+            retention_data.get("max_days", 180)
+        ),
+    )
+
     return AppConfig(
         environment=str(
             raw_config.get(
@@ -262,4 +288,5 @@ def load_config(path: str | Path = "config/config.yaml") -> AppConfig:
         logging=logging_config,
         collector=collector,
         processor=processor,
+        retention=retention,
     )

@@ -17,11 +17,6 @@ from .graphing import (
     aggregate_port_data,
     aggregate_protocol_data,
     aggregate_action_data,
-    plot_activity_graph,
-    plot_country_graph,
-    plot_port_graph,
-    plot_protocol_graph,
-    plot_action_graph,
     export_data_csv,
     export_data_json,
     export_data_yaml,
@@ -81,54 +76,72 @@ def build_parser():
         help="Turn on debugging output"
     )
     parser.add_argument(
-        "--version", "-V", 
-        action="version", 
+        "--version", "-V",
+        action="version",
         version="%(prog)s 0.1.0"
     )
     parser.add_argument(
-        "--graph-activity",
+        "--stats",
         action="store_true",
-        help="Generate time series graph of firewall activity"
+        help="Show database statistics (row counts, storage size, etc.)"
     )
     parser.add_argument(
-        "--graph-countries",
+        "--health",
         action="store_true",
-        help="Generate bar chart of top source countries"
+        help="Run health checks (database, GeoIP, config)"
     )
     parser.add_argument(
-        "--graph-ports",
+        "--show-config",
         action="store_true",
-        help="Generate chart of most targeted ports"
+        help="Display current configuration"
     )
     parser.add_argument(
-        "--graph-protocols",
+        "--summary",
         action="store_true",
-        help="Generate protocol distribution pie chart"
+        help="Show quick summary of firewall logs"
     )
     parser.add_argument(
-        "--graph-actions",
-        action="store_true",
-        help="Generate REJECT/ALLOW/DENY distribution"
-    )
-    parser.add_argument(
-        "--export-graph-data",
-        action="store_true",
-        help="Export graph data to CSV/JSON for external visualization"
-    )
-    parser.add_argument(
-        "--time-range",
-        help="Specify time range for graphs (e.g., '7d', '2024-01-01:2024-01-31')"
-    )
-    parser.add_argument(
-        "--top-n",
+        "--recent",
         type=int,
-        default=10,
-        help="Limit results to top N items (default: 10)"
+        metavar="N",
+        help="Show last N log entries"
     )
     parser.add_argument(
-        "--output-dir",
-        default="graphs",
-        help="Directory to save graph files (default: graphs)"
+        "--top-ips",
+        type=int,
+        metavar="N",
+        help="Show top N source IPs by request count"
+    )
+    parser.add_argument(
+        "--top-ports",
+        type=int,
+        metavar="N",
+        help="Show most targeted destination ports"
+    )
+    parser.add_argument(
+        "--by-action",
+        metavar="ACTION",
+        help="Show logs filtered by action type (ALLOW/DENY/REJECT)"
+    )
+    parser.add_argument(
+        "--vacuum",
+        action="store_true",
+        help="Run VACUUM on the database table"
+    )
+    parser.add_argument(
+        "--retention-status",
+        action="store_true",
+        help="Show retention policy status"
+    )
+    parser.add_argument(
+        "--test-geoip",
+        metavar="IP",
+        help="Test GeoIP lookup with a specific IP address"
+    )
+    parser.add_argument(
+        "--validate-config",
+        action="store_true",
+        help="Validate configuration file without running"
     )
     return parser
 
@@ -186,6 +199,354 @@ def main():
     collector = FirewallLogCollector(db, config.collector)
     geolocator = GeoLocator(config.geoip.database_path)
 
+    if args.validate_config:
+        print("Configuration validation:")
+        print("-" * 40)
+        print(f"Config file: {args.config}")
+        print(f"Database host: {config.database.host}")
+        print(f"Database name: {config.database.database}")
+        print(f"GeoIP database: {config.geoip.database_path}")
+        print(f"Collector schema: {config.collector.schema}")
+        print(f"Collector table: {config.collector.table}")
+        print(f"Retention enabled: {config.retention.enabled}")
+        print(f"Retention max days: {config.retention.max_days}")
+        print("\nConfiguration appears valid.")
+        sys.exit(0)
+
+    if args.show_config:
+        print("Current configuration:")
+        print("-" * 40)
+        print(f"Environment: {config.environment}")
+        print(f"\nDatabase:")
+        print(f"  Host: {config.database.host}")
+        print(f"  Port: {config.database.port}")
+        print(f"  Database: {config.database.database}")
+        print(f"  User: {config.database.user}")
+        print(f"  Schema: {config.database.schema}")
+        print(f"\nGeoIP:")
+        print(f"  Database path: {config.geoip.database_path}")
+        print(f"  Enabled: {config.geoip.enabled}")
+        print(f"\nCollector:")
+        print(f"  Schema: {config.collector.schema}")
+        print(f"  Table: {config.collector.table}")
+        print(f"  Batch size: {config.collector.batch_size}")
+        print(f"\nRetention:")
+        print(f"  Enabled: {config.retention.enabled}")
+        print(f"  Max days: {config.retention.max_days}")
+        sys.exit(0)
+
+    if args.test_geoip:
+        test_ip = args.test_geoip
+        print(f"Testing GeoIP lookup for: {test_ip}")
+        try:
+            geolocation = geolocator.lookup(test_ip)
+            if geolocation:
+                print(f"Country: {geolocation.country}")
+                print(f"Region: {geolocation.region}")
+                print(f"City: {geolocation.city}")
+            else:
+                print("No geolocation data found for this IP")
+        except Exception as exc:
+            print(f"GeoIP lookup failed: {exc}")
+            sys.exit(1)
+        collector.close()
+        sys.exit(0)
+
+    if args.health:
+        print("Health checks:")
+        print("-" * 40)
+        
+        # Database connection
+        try:
+            db.connect()
+            print("✓ Database connection: OK")
+            db.close()
+        except Exception as exc:
+            print(f"✗ Database connection: FAILED - {exc}")
+            sys.exit(1)
+        
+        # GeoIP database
+        try:
+            if config.geoip.database_path.exists():
+                print("✓ GeoIP database file: OK")
+            else:
+                print(f"✗ GeoIP database file: NOT FOUND - {config.geoip.database_path}")
+                sys.exit(1)
+        except Exception as exc:
+            print(f"✗ GeoIP database check: FAILED - {exc}")
+            sys.exit(1)
+        
+        # Config
+        print("✓ Configuration: OK")
+        
+        print("\nAll health checks passed.")
+        collector.close()
+        sys.exit(0)
+
+    if args.stats:
+        print("Database Statistics:")
+        print("-" * 40)
+        
+        table = f"{config.collector.schema}.{config.collector.table}"
+        
+        # Row count
+        try:
+            count = collector.count_table_rows(table)
+            print(f"Row count: {count}")
+        except Exception as exc:
+            logger.error(f"Failed to get row count: {exc}")
+            print(f"Row count: Error - {exc}")
+        
+        # Storage size
+        try:
+            sql = f"""
+                SELECT pg_size_pretty(pg_total_relation_size('{table}')) as size
+            """
+            result = db.fetch_one(sql)
+            if result:
+                print(f"Storage size: {result['size']}")
+        except Exception as exc:
+            logger.error(f"Failed to get storage size: {exc}")
+            print(f"Storage size: Error - {exc}")
+        
+        # Oldest and newest entries
+        try:
+            sql = f"""
+                SELECT MIN(log_time) as oldest, MAX(log_time) as newest
+                FROM {table}
+            """
+            result = db.fetch_one(sql)
+            if result:
+                print(f"Oldest entry: {result['oldest']}")
+                print(f"Newest entry: {result['newest']}")
+        except Exception as exc:
+            logger.error(f"Failed to get time range: {exc}")
+            print(f"Time range: Error - {exc}")
+        
+        collector.close()
+        sys.exit(0)
+
+    if args.summary:
+        print("Firewall Log Summary:")
+        print("-" * 40)
+        
+        table = f"{config.collector.schema}.{config.collector.table}"
+        
+        # Total count grouped by action
+        try:
+            sql = f"""
+                SELECT action, COUNT(*) as count
+                FROM {table}
+                GROUP BY action
+                ORDER BY count DESC
+            """
+            results = db.fetch_all(sql)
+            if results:
+                print("\nBy action:")
+                for row in results:
+                    print(f"  {row['action']}: {row['count']}")
+        except Exception as exc:
+            logger.error(f"Failed to get action summary: {exc}")
+            print(f"Action summary: Error - {exc}")
+        
+        # Top 5 source IPs
+        try:
+            sql = f"""
+                SELECT src_ip, COUNT(*) as count
+                FROM {table}
+                GROUP BY src_ip
+                ORDER BY count DESC
+                LIMIT 5
+            """
+            results = db.fetch_all(sql)
+            if results:
+                print("\nTop 5 source IPs:")
+                for row in results:
+                    print(f"  {row['src_ip']}: {row['count']}")
+        except Exception as exc:
+            logger.error(f"Failed to get top IPs: {exc}")
+            print(f"Top IPs: Error - {exc}")
+        
+        # Top 5 destination ports
+        try:
+            sql = f"""
+                SELECT dport, COUNT(*) as count
+                FROM {table}
+                WHERE dport IS NOT NULL
+                GROUP BY dport
+                ORDER BY count DESC
+                LIMIT 5
+            """
+            results = db.fetch_all(sql)
+            if results:
+                print("\nTop 5 destination ports:")
+                for row in results:
+                    print(f"  {row['dport']}: {row['count']}")
+        except Exception as exc:
+            logger.error(f"Failed to get top ports: {exc}")
+            print(f"Top ports: Error - {exc}")
+        
+        collector.close()
+        sys.exit(0)
+
+    if args.retention_status:
+        print("Retention Policy Status:")
+        print("-" * 40)
+        print(f"Enabled: {config.retention.enabled}")
+        print(f"Max days: {config.retention.max_days}")
+        
+        table = f"{config.collector.schema}.{config.collector.table}"
+        
+        # Check how many rows would be deleted
+        try:
+            sql = f"""
+                SELECT COUNT(*) as count
+                FROM {table}
+                WHERE log_time < NOW() - INTERVAL '{config.retention.max_days} days'
+            """
+            result = db.fetch_one(sql)
+            if result:
+                print(f"Rows older than {config.retention.max_days} days: {result['count']}")
+        except Exception as exc:
+            logger.error(f"Failed to check retention status: {exc}")
+            print(f"Retention check: Error - {exc}")
+        
+        # Current storage size
+        try:
+            sql = f"""
+                SELECT pg_size_pretty(pg_total_relation_size('{table}')) as size
+            """
+            result = db.fetch_one(sql)
+            if result:
+                print(f"Current storage size: {result['size']}")
+        except Exception as exc:
+            logger.error(f"Failed to get storage size: {exc}")
+            print(f"Storage size: Error - {exc}")
+        
+        collector.close()
+        sys.exit(0)
+
+    if args.vacuum:
+        print("Running VACUUM on database table...")
+        table = f"{config.collector.schema}.{config.collector.table}"
+        try:
+            sql = f"VACUUM {table}"
+            db.execute(sql)
+            print(f"VACUUM completed on {table}")
+        except Exception as exc:
+            logger.error(f"VACUUM failed: {exc}")
+            print(f"VACUUM failed: {exc}")
+            sys.exit(1)
+        collector.close()
+        sys.exit(0)
+
+    if args.recent:
+        n = args.recent
+        print(f"Last {n} log entries:")
+        print("-" * 40)
+        
+        table = f"{config.collector.schema}.{config.collector.table}"
+        try:
+            sql = f"""
+                SELECT * FROM {table}
+                ORDER BY log_time DESC
+                LIMIT {n}
+            """
+            results = db.fetch_all(sql)
+            if results:
+                for row in results:
+                    print(f"{row['log_time']}: {row['src_ip']} -> {row['dst_ip']}:{row['dport']} ({row['action']})")
+            else:
+                print("No log entries found")
+        except Exception as exc:
+            logger.error(f"Failed to fetch recent logs: {exc}")
+            print(f"Error: {exc}")
+            sys.exit(1)
+        collector.close()
+        sys.exit(0)
+
+    if args.top_ips:
+        n = args.top_ips
+        print(f"Top {n} source IPs by request count:")
+        print("-" * 40)
+        
+        table = f"{config.collector.schema}.{config.collector.table}"
+        try:
+            sql = f"""
+                SELECT src_ip, COUNT(*) as count
+                FROM {table}
+                GROUP BY src_ip
+                ORDER BY count DESC
+                LIMIT {n}
+            """
+            results = db.fetch_all(sql)
+            if results:
+                for row in results:
+                    print(f"{row['src_ip']}: {row['count']} requests")
+            else:
+                print("No log entries found")
+        except Exception as exc:
+            logger.error(f"Failed to fetch top IPs: {exc}")
+            print(f"Error: {exc}")
+            sys.exit(1)
+        collector.close()
+        sys.exit(0)
+
+    if args.top_ports:
+        n = args.top_ports
+        print(f"Top {n} destination ports:")
+        print("-" * 40)
+        
+        table = f"{config.collector.schema}.{config.collector.table}"
+        try:
+            sql = f"""
+                SELECT dport, COUNT(*) as count
+                FROM {table}
+                WHERE dport IS NOT NULL
+                GROUP BY dport
+                ORDER BY count DESC
+                LIMIT {n}
+            """
+            results = db.fetch_all(sql)
+            if results:
+                for row in results:
+                    print(f"Port {row['dport']}: {row['count']} hits")
+            else:
+                print("No log entries found")
+        except Exception as exc:
+            logger.error(f"Failed to fetch top ports: {exc}")
+            print(f"Error: {exc}")
+            sys.exit(1)
+        collector.close()
+        sys.exit(0)
+
+    if args.by_action:
+        action = args.by_action.upper()
+        print(f"Logs with action '{action}':")
+        print("-" * 40)
+        
+        table = f"{config.collector.schema}.{config.collector.table}"
+        try:
+            sql = f"""
+                SELECT * FROM {table}
+                WHERE action = '{action}'
+                ORDER BY log_time DESC
+                LIMIT 20
+            """
+            results = db.fetch_all(sql)
+            if results:
+                for row in results:
+                    print(f"{row['log_time']}: {row['src_ip']} -> {row['dst_ip']}:{row['dport']}")
+                print(f"\nTotal matching entries: {len(results)} (showing first 20)")
+            else:
+                print(f"No logs found with action '{action}'")
+        except Exception as exc:
+            logger.error(f"Failed to fetch logs by action: {exc}")
+            print(f"Error: {exc}")
+            sys.exit(1)
+        collector.close()
+        sys.exit(0)
+
     if args.dump_table:
         firewall_log_dict = collector.dump_all_logs()
         pprint.pprint(firewall_log_dict)
@@ -226,114 +587,6 @@ def main():
         except FileNotFoundError:
             print(f"Error: File not found: {args.filename}")
             sys.exit(1)
-        collector.close()
-        sys.exit(0)
-
-    # Graphing options
-    if any([args.graph_activity, args.graph_countries, args.graph_ports, 
-            args.graph_protocols, args.graph_actions, args.export_graph_data]):
-        # Create output directory
-        output_dir = Path(args.output_dir)
-        output_dir.mkdir(parents=True, exist_ok=True)
-        
-        # Fetch logs
-        logs_list = []
-        firewall_log_dict = collector.dump_all_logs()
-        for log_id, log_data in firewall_log_dict.items():
-            log_entry = {
-                'log_time': log_data.get('log_time'),
-                'src_ip': log_data.get('src_ip'),
-                'dst_ip': log_data.get('dst_ip'),
-                'spt': log_data.get('spt'),
-                'dport': log_data.get('dport'),
-                'protocol': log_data.get('protocol'),
-                'action': log_data.get('action'),
-            }
-            
-            # Add geolocation data if available
-            src_ip = log_data.get('src_ip')
-            if src_ip:
-                geolocation = geolocator.lookup(src_ip)
-                if geolocation:
-                    log_entry['country'] = geolocation.country
-                    log_entry['region'] = geolocation.region
-                else:
-                    log_entry['country'] = 'Unknown'
-                    log_entry['region'] = 'Unknown'
-            
-            logs_list.append(log_entry)
-        
-        # Apply time range filter if specified
-        if args.time_range:
-            start_time, end_time = parse_time_range(args.time_range)
-            logs_list = [
-                log for log in logs_list 
-                if start_time <= log['log_time'] <= end_time
-            ]
-        
-        # Generate requested graphs
-        if args.graph_activity:
-            activity_data = aggregate_activity_data(logs_list)
-            plot_activity_graph(activity_data, output_dir / 'activity.png')
-            print(f"Activity graph saved to {output_dir / 'activity.png'}")
-        
-        if args.graph_countries:
-            country_data = aggregate_country_data(logs_list, args.top_n)
-            plot_country_graph(country_data, output_dir / 'countries.png')
-            print(f"Country graph saved to {output_dir / 'countries.png'}")
-        
-        if args.graph_ports:
-            port_data = aggregate_port_data(logs_list, args.top_n)
-            plot_port_graph(port_data, output_dir / 'ports.png')
-            print(f"Port graph saved to {output_dir / 'ports.png'}")
-        
-        if args.graph_protocols:
-            protocol_data = aggregate_protocol_data(logs_list)
-            plot_protocol_graph(protocol_data, output_dir / 'protocols.png')
-            print(f"Protocol graph saved to {output_dir / 'protocols.png'}")
-        
-        if args.graph_actions:
-            action_data = aggregate_action_data(logs_list)
-            plot_action_graph(action_data, output_dir / 'actions.png')
-            print(f"Action graph saved to {output_dir / 'actions.png'}")
-        
-        # Export data if requested
-        if args.export_graph_data:
-            if args.graph_activity:
-                activity_data = aggregate_activity_data(logs_list)
-                export_data_csv(activity_data, output_dir / 'activity_data.csv')
-                export_data_json(activity_data, output_dir / 'activity_data.json')
-                export_data_yaml(activity_data, output_dir / 'activity_data.yaml')
-                print(f"Activity data exported to {output_dir / 'activity_data.csv'}, {output_dir / 'activity_data.json'}, and {output_dir / 'activity_data.yaml'}")
-            
-            if args.graph_countries:
-                country_data = aggregate_country_data(logs_list, args.top_n)
-                export_data_csv(country_data, output_dir / 'countries_data.csv')
-                export_data_json(country_data, output_dir / 'countries_data.json')
-                export_data_yaml(country_data, output_dir / 'countries_data.yaml')
-                print(f"Country data exported to {output_dir / 'countries_data.csv'}, {output_dir / 'countries_data.json'}, and {output_dir / 'countries_data.yaml'}")
-            
-            if args.graph_ports:
-                port_data = aggregate_port_data(logs_list, args.top_n)
-                export_data_csv(port_data, output_dir / 'ports_data.csv')
-                export_data_json(port_data, output_dir / 'ports_data.json')
-                export_data_yaml(port_data, output_dir / 'ports_data.yaml')
-                print(f"Port data exported to {output_dir / 'ports_data.csv'}, {output_dir / 'ports_data.json'}, and {output_dir / 'ports_data.yaml'}")
-            
-            if args.graph_protocols:
-                protocol_data = aggregate_protocol_data(logs_list)
-                export_data_csv(protocol_data, output_dir / 'protocols_data.csv')
-                export_data_json(protocol_data, output_dir / 'protocols_data.json')
-                export_data_yaml(protocol_data, output_dir / 'protocols_data.yaml')
-                print(f"Protocol data exported to {output_dir / 'protocols_data.csv'}, {output_dir / 'protocols_data.json'}, and {output_dir / 'protocols_data.yaml'}")
-            
-            if args.graph_actions:
-                action_data = aggregate_action_data(logs_list)
-                export_data_csv(action_data, output_dir / 'actions_data.csv')
-                export_data_json(action_data, output_dir / 'actions_data.json')
-                export_data_yaml(action_data, output_dir / 'actions_data.yaml')
-                print(f"Action data exported to {output_dir / 'actions_data.csv'}, {output_dir / 'actions_data.json'}, and {output_dir / 'actions_data.yaml'}")
-        
         collector.close()
         sys.exit(0)
 

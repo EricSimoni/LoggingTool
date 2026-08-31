@@ -12,3 +12,7 @@ collector:
   schema: "eng_ops"
   table: "firewall_logs"
   batch_size: 500
+
+retention:
+  enabled: true
+  max_days: 180
