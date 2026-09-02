@@ -1,6 +1,11 @@
 psycopg
 geoip2
 PyYAML
+fastapi
+uvicorn
+websockets
+python-multipart
+psutil
 python-dotenv
 pytest
 matplotlib

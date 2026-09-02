@@ -2,15 +2,19 @@ import argparse
 import logging
 import logging.config
 import logging.handlers
+import platform
 import pprint
 import sys
 from pathlib import Path
+
+import psutil
 
 from . import __version__
 from .config import load_config
 from .database import Database
 from .collector import FirewallLogCollector
 from .geolocation import GeoLocator
+from .web import app
 from .graphing import (
     aggregate_activity_data,
     aggregate_country_data,
@@ -143,6 +147,27 @@ def build_parser():
         action="store_true",
         help="Validate configuration file without running"
     )
+    parser.add_argument(
+        "--serve",
+        action="store_true",
+        help="Start the web dashboard server"
+    )
+    parser.add_argument(
+        "--host",
+        default="127.0.0.1",
+        help="Host to bind web server to (default: 127.0.0.1)"
+    )
+    parser.add_argument(
+        "--port",
+        type=int,
+        default=8000,
+        help="Port to run web server on (default: 8000)"
+    )
+    parser.add_argument(
+        "--os-info",
+        action="store_true",
+        help="Display operating system information"
+    )
     return parser
 
 
@@ -154,6 +179,41 @@ def main():
         sys.exit(1)
     
     config = load_config(args.config)
+    
+    # Display OS information if requested
+    if args.os_info:
+        print("Operating System Information:")
+        print("-" * 40)
+        print(f"System: {platform.system()}")
+        print(f"Node Name: {platform.node()}")
+        print(f"Release: {platform.release()}")
+        print(f"Version: {platform.version()}")
+        print(f"Machine: {platform.machine()}")
+        print(f"Processor: {platform.processor()}")
+        print(f"Python Version: {platform.python_version()}")
+        print(f"Python Implementation: {platform.python_implementation()}")
+        print()
+        print("Memory Information:")
+        print("-" * 40)
+        mem = psutil.virtual_memory()
+        print(f"Total Memory: {mem.total / (1024**3):.2f} GB")
+        print(f"Available Memory: {mem.available / (1024**3):.2f} GB")
+        print(f"Used Memory: {mem.used / (1024**3):.2f} GB")
+        print(f"Memory Percentage: {mem.percent:.1f}%")
+        print()
+        print("CPU Information:")
+        print("-" * 40)
+        print(f"CPU Count: {psutil.cpu_count(logical=False)} physical, {psutil.cpu_count(logical=True)} logical")
+        print(f"CPU Usage: {psutil.cpu_percent(interval=1):.1f}%")
+        sys.exit(0)
+    
+    # Start web server if requested
+    if args.serve:
+        import uvicorn
+        logger.info(f"Starting web server on {args.host}:{args.port}")
+        print(f"Starting web dashboard on http://{args.host}:{args.port}")
+        uvicorn.run(app, host=args.host, port=args.port)
+        sys.exit(0)
     
     # Set up logging from config file
     # Create logs directory first
